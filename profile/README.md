@@ -27,7 +27,7 @@ We believe in:
 
 ---
 
-## 💡 Focus Areas
+## Focus Areas
 
 * Google Cloud Platform (GCP)
 * Gemini & Google AI
@@ -40,7 +40,7 @@ We believe in:
 
 ---
 
-## 🏙️ Pittsburgh Tech Community
+## Pittsburgh Tech Community
 
 Pittsburgh is rapidly becoming a hub for:
 
