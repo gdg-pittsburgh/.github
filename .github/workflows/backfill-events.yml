@@ -71,14 +71,8 @@ jobs:
               record = {
                   "Title":       content.get("title", ""),
                   "Description": content.get("body", ""),
-                  "URL":         content.get("url", ""),
                   "Status":      content.get("state", ""),
-                  "Created":     content.get("createdAt", ""),
-                  "Labels":      ", ".join(
-                                     l["name"] for l in
-                                     content.get("labels", {}).get("nodes", [])
-                                 ),
-              }
+
 
               # Merge any custom project fields (Date, Location, etc.)
               record.update(field_values)
