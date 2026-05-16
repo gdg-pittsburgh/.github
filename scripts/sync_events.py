@@ -35,6 +35,7 @@ for item in items:
             field_values[field] = value
 
     record = {
+        "Name":        content.get("title", ""),
         "Title":       content.get("title", ""),
         "Description": content.get("body", ""),
         "URL":         content.get("url", ""),
