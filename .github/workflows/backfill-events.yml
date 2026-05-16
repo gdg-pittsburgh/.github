@@ -1,90 +1,30 @@
 name: Backfill Events to NocoDB
 
 on:
-  workflow_dispatch: # manual trigger only
+  workflow_dispatch:
 
 jobs:
   backfill:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Fetch GitHub Project items and push to NocoDB
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Fetch GitHub Project items
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          curl -s -X POST https://api.github.com/graphql \
+            -H "Authorization: bearer $GH_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"query":"{ organization(login: \"gdg-pittsburgh\") { projectV2(number: 2) { items(first: 100) { nodes { id content { ... on Issue { title body url createdAt state labels(first: 5) { nodes { name } } } } fieldValues(first: 10) { nodes { ... on ProjectV2ItemFieldTextValue { text field { ... on ProjectV2FieldCommon { name } } } ... on ProjectV2ItemFieldSingleSelectValue { name field { ... on ProjectV2FieldCommon { name } } } ... on ProjectV2ItemFieldDateValue { date field { ... on ProjectV2FieldCommon { name } } } } } } } } } }"}' \
+            > project_items.json
+          echo "GraphQL fetch complete"
+
+      - name: Push to NocoDB
+        env:
           NOCO_TOKEN: ${{ secrets.NOCO_API_TOKEN }}
           NOCO_URL: https://plash-dev-nocodb.ilmfwu.easypanel.host
           NOCO_TABLE_ID: mkcrqxmha8litwl
-          NOCO_VIEW_ID: vwexmmrv0zzs5q7g
-        run: |
-          # Fetch all items from GitHub Project #2 (gdg-pittsburgh org)
-          # Uses GraphQL because Projects v2 is not available via REST
-          RESPONSE=$(curl -s -X POST https://api.github.com/graphql \
-            -H "Authorization: bearer $GH_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "query": "{ organization(login: \"gdg-pittsburgh\") { projectV2(number: 2) { items(first: 100) { nodes { id content { ... on Issue { title body url createdAt state labels(first: 5) { nodes { name } } } } fieldValues(first: 10) { nodes { ... on ProjectV2ItemFieldTextValue { text field { ... on ProjectV2FieldCommon { name } } } ... on ProjectV2ItemFieldSingleSelectValue { name field { ... on ProjectV2FieldCommon { name } } } ... on ProjectV2ItemFieldDateValue { date field { ... on ProjectV2FieldCommon { name } } } } } } } } } }"
-            }')
-
-          echo "$RESPONSE" > /tmp/project_items.json
-          echo "Fetched project items:"
-          cat /tmp/project_items.json | python3 -m json.tool --no-ensure-ascii 2>/dev/null | head -50
-
-          # Parse and POST each item to NocoDB
-          python3 << 'PYEOF'
-          import json, os, requests, sys
-
-          noco_url   = os.environ["NOCO_URL"]
-          table_id   = os.environ["NOCO_TABLE_ID"]
-          noco_token = os.environ["NOCO_TOKEN"]
-
-          headers = {
-              "xc-token": noco_token,
-              "Content-Type": "application/json"
-          }
-
-          endpoint = f"{noco_url}/api/v2/tables/{table_id}/records"
-
-          with open("/tmp/project_items.json") as f:
-              data = json.load(f)
-
-          items = data["data"]["organization"]["projectV2"]["items"]["nodes"]
-          print(f"Found {len(items)} project items")
-
-          success, failed = 0, 0
-
-          for item in items:
-              content = item.get("content")
-              if not content:
-                  print("Skipping item with no content")
-                  continue
-
-              # Pull custom field values from the project board
-              field_values = {}
-              for fv in item.get("fieldValues", {}).get("nodes", []):
-                  field = fv.get("field", {}).get("name", "")
-                  value = fv.get("text") or fv.get("name") or fv.get("date")
-                  if field and value:
-                      field_values[field] = value
-
-              # Map GitHub fields to NocoDB columns
-              # Adjust the key names below to match your NocoDB column names exactly
-              record = {
-                  "Title":       content.get("title", ""),
-                  "Description": content.get("body", ""),
-                  "Status":      content.get("state", ""),
-
-
-              # Merge any custom project fields (Date, Location, etc.)
-              record.update(field_values)
-
-              resp = requests.post(endpoint, headers=headers, json=record)
-              if resp.status_code in (200, 201):
-                  print(f"  Created: {record['Title']}")
-                  success += 1
-              else:
-                  print(f"  FAILED: {record['Title']} — {resp.status_code} {resp.text}")
-                  failed += 1
-
-          print(f"\nDone. {success} created, {failed} failed.")
-          sys.exit(1 if failed > 0 else 0)
-          PYEOF
+        run: python3 .github/scripts/sync_events.py
