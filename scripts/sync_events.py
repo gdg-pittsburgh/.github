@@ -11,6 +11,8 @@ headers = {
 
 endpoint = f"{noco_url}/api/v2/tables/{table_id}/records"
 
+SKIP_FIELDS = {"Status", "Title"}  # Title already mapped from content, Status mismatches NocoDB options
+
 with open("project_items.json") as f:
     data = json.load(f)
 
@@ -29,14 +31,13 @@ for item in items:
     for fv in item.get("fieldValues", {}).get("nodes", []):
         field = fv.get("field", {}).get("name", "")
         value = fv.get("text") or fv.get("name") or fv.get("date")
-        if field and value:
+        if field and value and field not in SKIP_FIELDS:
             field_values[field] = value
 
     record = {
         "Title":       content.get("title", ""),
         "Description": content.get("body", ""),
         "URL":         content.get("url", ""),
-        "Status":      content.get("state", ""),
         "Created":     content.get("createdAt", ""),
         "Labels":      ", ".join(l["name"] for l in content.get("labels", {}).get("nodes", [])),
     }
